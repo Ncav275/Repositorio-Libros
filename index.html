@@ -39,6 +39,7 @@
         .form-actions { display: flex; justify-content: flex-end; margin-top: 15px; }
         .btn-submit { background-color: #274b69; color: #ffffff; border: none; border-radius: 6px; padding: 10px 24px; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
         .btn-submit:hover { background-color: #1e3a52; }
+        .btn-submit:disabled { background-color: #94a3b8; cursor: not-allowed; }
         .import-card .subtitle { font-size: 0.8rem; margin: 6px 0 12px 0; color: #4b5563; }
         .drop-zone { border: 1px dashed #b0b7be; border-radius: 8px; padding: 25px 10px; text-align: center; cursor: pointer; background-color: #fdfdfd; }
         .upload-icon { font-size: 1.6rem; color: #5d6773; margin-bottom: 8px; }
@@ -165,7 +166,7 @@
                         </div>
 
                         <div class="form-actions">
-                            <button type="button" class="btn-submit" onclick="agregarOrden()">Generar Solicitud</button>
+                            <button type="button" id="btnGenerar" class="btn-submit" onclick="agregarOrden()">Generar Solicitud</button>
                         </div>
                     </form>
                 </section>
@@ -178,7 +179,7 @@
                         <p id="nombreArchivo">Haz clic para seleccionar archivo CSV</p>
                         <input type="file" id="archivo_datos" accept=".csv, .txt" onchange="mostrarNombreArchivo(this)" hidden>
                     </div>
-                    <button type="button" class="btn-submit btn-import" onclick="procesarArchivoCSV()">Importar Órdenes</button>
+                    <button type="button" id="btnImportar" class="btn-submit btn-import" onclick="procesarArchivoCSV()">Importar Órdenes</button>
                 </section>
             </div>
 
@@ -261,8 +262,7 @@
     </div>
 
     <script>
-        // PEGA AQUÍ TU URL DE REALTIME DATABASE (CON /ordenes.json AL FINAL)
-        const FIREBASE_URL = "https://console.firebase.google.com/u/0/project/sistema-libros-9ee90/database/sistema-libros-9ee90-default-rtdb/data/~2F?hl=es-419";
+        const FIREBASE_URL = "https://sistema-libros-9ee90-default-rtdb.firebaseio.com/ordenes.json";
 
         const manualesPorCarrera = {
             "diseno_industrial": [
@@ -311,13 +311,10 @@
 
         async function cargarOrdenesDeLaNube() {
             try {
-                if (FIREBASE_URL.includes("TU-PROYECTO")) {
-                    listaOrdenes = JSON.parse(localStorage.getItem('ordenes_libros')) || [];
-                    renderizarTabla();
-                    return;
-                }
-
                 const resp = await fetch(FIREBASE_URL);
+                if (!resp.ok) {
+                    throw new Error(`Permiso denegado o error del servidor (HTTP ${resp.status}). Revisa la pestaña Reglas de Firebase.`);
+                }
                 const data = await resp.json();
                 
                 if (data) {
@@ -330,7 +327,7 @@
                 }
                 renderizarTabla();
             } catch (error) {
-                console.error("Error cargando base de datos:", error);
+                console.error("Error conectando con Firebase:", error);
             }
         }
 
@@ -378,7 +375,7 @@
                 : listaOrdenes;
 
             if (ordenesAMostrar.length === 0) {
-                cuerpoTabla.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #6b7280;">No hay órdenes registradas.</td></tr>`;
+                cuerpoTabla.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #6b7280;">No hay órdenes registradas en la base de datos.</td></tr>`;
                 return;
             }
 
@@ -394,7 +391,6 @@
                 const porcentaje = Math.min(100, Math.round((orden.entregados / orden.cantidad) * 100)) || 0;
                 const esCompleto = orden.entregados >= orden.cantidad;
                 const faltan = orden.cantidad - orden.entregados;
-                const ident = orden.firebaseKey || orden.id;
 
                 fila.innerHTML = `
                     <td><strong>#${orden.id}</strong></td>
@@ -421,11 +417,11 @@
                     <td><span class="badge ${badgeClass}">${orden.estado}</span></td>
                     <td class="actions">
                         ${!esCompleto && orden.estado !== 'Cancelado' 
-                            ? `<a href="javascript:void(0)" style="color:#15803d; font-weight:bold;" onclick="confirmarMaterialCompletoDirecto('${ident}')"><i class="fa-solid fa-check-double"></i> Confirmar Completo</a>` 
+                            ? `<a href="javascript:void(0)" style="color:#15803d; font-weight:bold;" onclick="confirmarMaterialCompletoDirecto('${orden.firebaseKey}')"><i class="fa-solid fa-check-double"></i> Confirmar Completo</a>` 
                             : ''
                         }
-                        <a href="javascript:void(0)" onclick="abrirModalEstado('${ident}')"><i class="fa-solid fa-pen-to-square"></i> Actualizar Paso/Reporte</a>
-                        <a href="javascript:void(0)" onclick="verHistorial('${ident}')"><i class="fa-solid fa-clock-rotate-left"></i> Historial Completo</a>
+                        <a href="javascript:void(0)" onclick="abrirModalEstado('${orden.firebaseKey}')"><i class="fa-solid fa-pen-to-square"></i> Actualizar Paso/Reporte</a>
+                        <a href="javascript:void(0)" onclick="verHistorial('${orden.firebaseKey}')"><i class="fa-solid fa-clock-rotate-left"></i> Historial Completo</a>
                         <a href="javascript:void(0)" onclick="mostrarModalQR(${orden.id})"><i class="fa-solid fa-qrcode"></i> QR Identificación</a>
                     </td>
                 `;
@@ -439,6 +435,7 @@
         }
 
         async function agregarOrden() {
+            const btn = document.getElementById('btnGenerar');
             const selectCarrera = document.getElementById('carrera');
             const selectManual = document.getElementById('manual');
             const inputCantidad = document.getElementById('cantidad');
@@ -452,6 +449,9 @@
                 alert('Por favor selecciona una carrera y un manual.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = 'Guardando...';
 
             const ahora = new Date();
             const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -472,24 +472,29 @@
                 historial: [`[${fechaHora}] PASO 1 (Solicitud): Solicitados ${cantidad} manuales.`]
             };
 
-            if (FIREBASE_URL.includes("TU-PROYECTO")) {
-                listaOrdenes.push(nuevaOrden);
-                localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
-                renderizarTabla();
-            } else {
-                await fetch(FIREBASE_URL, {
+            try {
+                const res = await fetch(FIREBASE_URL, {
                     method: 'POST',
                     body: JSON.stringify(nuevaOrden),
                     headers: { 'Content-Type': 'application/json' }
                 });
-                await cargarOrdenesDeLaNube();
-            }
 
-            inputCantidad.value = 1;
+                if (!res.ok) {
+                    throw new Error(`Error de permisos en Firebase (HTTP ${res.status}). Asegúrate de haber publicado ".read": true, ".write": true en la pestaña Reglas.`);
+                }
+
+                inputCantidad.value = 1;
+                await cargarOrdenesDeLaNube();
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Generar Solicitud';
+            }
         }
 
-        async function confirmarMaterialCompletoDirecto(ident) {
-            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
+        async function confirmarMaterialCompletoDirecto(firebaseKey) {
+            const orden = listaOrdenes.find(o => o.firebaseKey === firebaseKey);
             if (!orden) return;
 
             const confirmar = confirm(`¿Confirmar entrega completa de la Orden #${orden.id}?\n\nManual: ${orden.manual}\nCantidad: ${orden.cantidad} piezas.`);
@@ -500,33 +505,30 @@
                 orden.entregados = orden.cantidad;
                 orden.estado = 'Completo';
                 orden.timestamps.entrega = fechaHora;
+                if (!orden.historial) orden.historial = [];
                 orden.historial.push(`[${fechaHora}] PASO 3 (Entrega): Confirmación de material completo.`);
 
-                if (orden.firebaseKey) {
-                    const urlItem = FIREBASE_URL.replace('.json', `/${orden.firebaseKey}.json`);
-                    await fetch(urlItem, {
-                        method: 'PATCH',
-                        body: JSON.stringify({
-                            entregados: orden.cantidad,
-                            estado: 'Completo',
-                            timestamps: orden.timestamps,
-                            historial: orden.historial
-                        }),
-                        headers: { 'Content-Type': 'application/json' }
-                    });
-                    await cargarOrdenesDeLaNube();
-                } else {
-                    localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
-                    renderizarTabla();
-                }
+                const urlItem = FIREBASE_URL.replace('.json', `/${firebaseKey}.json`);
+                await fetch(urlItem, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        entregados: orden.cantidad,
+                        estado: 'Completo',
+                        timestamps: orden.timestamps,
+                        historial: orden.historial
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                await cargarOrdenesDeLaNube();
             }
         }
 
-        function abrirModalEstado(ident) {
-            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
+        function abrirModalEstado(firebaseKey) {
+            const orden = listaOrdenes.find(o => o.firebaseKey === firebaseKey);
             if (!orden) return;
 
-            document.getElementById('estadoOrdenId').value = ident;
+            document.getElementById('estadoOrdenId').value = firebaseKey;
             document.getElementById('estadoTitulo').textContent = `Actualizar Orden #${orden.id}`;
             document.getElementById('estadoDetalle').textContent = `${orden.carrera} - ${orden.manual}`;
             document.getElementById('nuevoEstadoSelect').value = orden.estado;
@@ -537,8 +539,8 @@
         }
 
         async function guardarActualizacionEstado() {
-            const ident = document.getElementById('estadoOrdenId').value;
-            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
+            const firebaseKey = document.getElementById('estadoOrdenId').value;
+            const orden = listaOrdenes.find(o => o.firebaseKey === firebaseKey);
             if (!orden) return;
 
             const nuevoEstado = document.getElementById('nuevoEstadoSelect').value;
@@ -568,27 +570,24 @@
 
             let log = `[${fechaHora}] Estado actualizado a '${nuevoEstado}'. Avance: ${nuevaCant}/${orden.cantidad}`;
             if (motivo) log += ` | Observación: "${motivo}"`;
+            
+            if (!orden.historial) orden.historial = [];
             orden.historial.push(log);
 
-            if (orden.firebaseKey) {
-                const urlItem = FIREBASE_URL.replace('.json', `/${orden.firebaseKey}.json`);
-                await fetch(urlItem, {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                        entregados: nuevaCant,
-                        estado: nuevoEstado,
-                        timestamps: orden.timestamps,
-                        historial: orden.historial
-                    }),
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                await cargarOrdenesDeLaNube();
-            } else {
-                localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
-                renderizarTabla();
-            }
+            const urlItem = FIREBASE_URL.replace('.json', `/${firebaseKey}.json`);
+            await fetch(urlItem, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    entregados: nuevaCant,
+                    estado: nuevoEstado,
+                    timestamps: orden.timestamps,
+                    historial: orden.historial
+                }),
+                headers: { 'Content-Type': 'application/json' }
+            });
 
             cerrarModal('modalEstado');
+            await cargarOrdenesDeLaNube();
         }
 
         function mostrarModalQR(id) {
@@ -616,10 +615,10 @@
             document.getElementById(idModal).style.display = 'none';
         }
 
-        function verHistorial(ident) {
-            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
+        function verHistorial(firebaseKey) {
+            const orden = listaOrdenes.find(o => o.firebaseKey === firebaseKey);
             if (orden) {
-                alert(`HISTORIAL DE SEGUIMIENTO - ORDEN #${orden.id}\n${orden.carrera} - ${orden.manual}\n\nLÍNEA TEMPORAL:\n- ` + orden.historial.join('\n- '));
+                alert(`HISTORIAL DE SEGUIMIENTO - ORDEN #${orden.id}\n${orden.carrera} - ${orden.manual}\n\nLÍNEA TEMPORAL:\n- ` + (orden.historial ? orden.historial.join('\n- ') : 'Sin registros'));
             }
         }
 
@@ -631,10 +630,15 @@
 
         async function procesarArchivoCSV() {
             const input = document.getElementById('archivo_datos');
+            const btn = document.getElementById('btnImportar');
+
             if (!input.files || !input.files[0]) {
                 alert('Por favor selecciona un archivo CSV primero.');
                 return;
             }
+
+            btn.disabled = true;
+            btn.textContent = 'Importando a Firebase...';
 
             const lector = new FileReader();
             lector.onload = async function(e) {
@@ -644,54 +648,60 @@
                 const ahora = new Date();
                 const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-                for (const linea of lineas) {
-                    const columnas = linea.split(',');
-                    if (columnas.length >= 3) {
-                        const carrera = columnas[0].trim();
-                        const manual = columnas[1].trim();
-                        const cantidad = parseInt(columnas[2].trim());
+                try {
+                    for (const linea of lineas) {
+                        const columnas = linea.split(',');
+                        if (columnas.length >= 3) {
+                            const carrera = columnas[0].trim();
+                            const manual = columnas[1].trim();
+                            const cantidad = parseInt(columnas[2].trim());
 
-                        if (carrera && manual && !isNaN(cantidad)) {
-                            const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
-                            const ordenObj = {
-                                id: nuevoID,
-                                carrera: carrera,
-                                manual: manual,
-                                cantidad: cantidad,
-                                entregados: 0,
-                                estado: 'Producción',
-                                timestamps: {
-                                    solicitud: fechaHora,
-                                    produccion: fechaHora,
-                                    entrega: null
-                                },
-                                historial: [`[${fechaHora}] Importado desde archivo. Solicitud de ${cantidad} unidades.`]
-                            };
+                            if (carrera && manual && !isNaN(cantidad)) {
+                                const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
+                                const ordenObj = {
+                                    id: nuevoID,
+                                    carrera: carrera,
+                                    manual: manual,
+                                    cantidad: cantidad,
+                                    entregados: 0,
+                                    estado: 'Producción',
+                                    timestamps: {
+                                        solicitud: fechaHora,
+                                        produccion: fechaHora,
+                                        entrega: null
+                                    },
+                                    historial: [`[${fechaHora}] Importado desde archivo. Solicitud de ${cantidad} unidades.`]
+                                };
 
-                            if (FIREBASE_URL.includes("TU-PROYECTO")) {
-                                listaOrdenes.push(ordenObj);
-                            } else {
-                                await fetch(FIREBASE_URL, {
+                                const resp = await fetch(FIREBASE_URL, {
                                     method: 'POST',
                                     body: JSON.stringify(ordenObj),
                                     headers: { 'Content-Type': 'application/json' }
                                 });
+
+                                if (!resp.ok) {
+                                    throw new Error('Fallo de permisos al importar datos.');
+                                }
+
+                                listaOrdenes.push(ordenObj);
+                                importados++;
                             }
-                            importados++;
                         }
                     }
-                }
 
-                if (importados > 0) {
-                    alert(`¡Se importaron ${importados} órdenes con éxito!`);
-                    input.value = '';
-                    document.getElementById('nombreArchivo').textContent = 'Haz clic para seleccionar archivo CSV';
-                    if (FIREBASE_URL.includes("TU-PROYECTO")) {
-                        localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
-                        renderizarTabla();
-                    } else {
+                    if (importados > 0) {
+                        alert(`¡Se importaron ${importados} órdenes a Firebase exitosamente!`);
+                        input.value = '';
+                        document.getElementById('nombreArchivo').textContent = 'Haz clic para seleccionar archivo CSV';
                         await cargarOrdenesDeLaNube();
+                    } else {
+                        alert('No se encontraron filas con el formato: carrera,manual,cantidad');
                     }
+                } catch (err) {
+                    alert('Error durante la importación: ' + err.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = 'Importar Órdenes';
                 }
             };
             lector.readAsText(input.files[0]);
@@ -700,9 +710,7 @@
         window.addEventListener('load', async () => {
             await cargarOrdenesDeLaNube();
 
-            if (!FIREBASE_URL.includes("TU-PROYECTO")) {
-                setInterval(cargarOrdenesDeLaNube, 4000);
-            }
+            setInterval(cargarOrdenesDeLaNube, 3000);
 
             const params = new URLSearchParams(window.location.search);
             if (params.get('accion') === 'entregar') {
@@ -710,7 +718,7 @@
                 const orden = listaOrdenes.find(o => o.id === idOrden);
 
                 if (orden) {
-                    confirmarMaterialCompletoDirecto(orden.firebaseKey || orden.id);
+                    confirmarMaterialCompletoDirecto(orden.firebaseKey);
                 }
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
