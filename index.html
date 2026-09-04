@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control de Producción y Entrega de Manuales</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #edebe4; color: #2e3842; }
+        .layout-app { display: flex; min-height: 100vh; }
+        .sidebar { width: 60px; background-color: #ffffff; border-right: 1px solid #d9d6cc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; gap: 25px; }
+        .sidebar-item { font-size: 1.2rem; color: #6b7785; cursor: pointer; }
+        .sidebar-item.active { color: #1e3a5f; }
+        .main-content { flex: 1; padding: 20px 40px; max-width: 1550px; margin: 0 auto; }
+        .app-header h1 { text-align: center; font-size: 2rem; font-weight: 500; margin-bottom: 25px; color: #1d2129; }
+        .card { background: #ffffff; border-radius: 12px; border: 1px solid #d9d6cc; padding: 24px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-bottom: 20px; }
+        .card h2 { font-size: 1.25rem; font-weight: 500; color: #1e242b; }
+        .grid-top { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+        .card-header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+        .stepper { display: flex; align-items: center; gap: 8px; }
+        .step { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .step-circle { width: 20px; height: 20px; border-radius: 50%; background-color: #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: #ffffff; }
+        .step-label { font-size: 0.75rem; color: #4b5563; }
+        .step-done .step-circle { background-color: #1f3a52; }
+        .step-active .step-circle { background-color: #8edecb; }
+        .step-line { width: 30px; height: 2px; background-color: #c9cdd4; margin-bottom: 15px; }
+        .form-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; font-size: 0.85rem; font-weight: 500; margin-bottom: 6px; color: #2b303a; }
+        select, input[type="text"], input[type="number"], textarea { width: 100%; padding: 9px 12px; border: 1px solid #c2c7ce; border-radius: 6px; background-color: #fcfcfc; font-size: 0.85rem; outline: none; }
+        .number-input-group { display: flex; align-items: center; border: 1px solid #c2c7ce; border-radius: 6px; overflow: hidden; width: 100%; }
+        .number-input-group input { border: none; padding: 8px 12px; flex: 1; outline: none; font-size: 0.9rem; }
+        .btn-qty { background: #f0f2f5; border: none; border-left: 1px solid #c2c7ce; padding: 8px 14px; cursor: pointer; font-size: 1rem; font-weight: bold; }
+        .btn-qty:hover { background: #e2e5e9; }
+        .input-with-tools { display: flex; gap: 8px; margin-bottom: 8px; }
+        .search-box { display: flex; align-items: center; border: 1px solid #c2c7ce; border-radius: 6px; padding: 0 10px; flex: 1; background: #ffffff; }
+        .search-box input { border: none; padding: 8px; width: 100%; outline: none; }
+        .form-actions { display: flex; justify-content: flex-end; margin-top: 15px; }
+        .btn-submit { background-color: #274b69; color: #ffffff; border: none; border-radius: 6px; padding: 10px 24px; font-size: 0.85rem; font-weight: 500; cursor: pointer; }
+        .btn-submit:hover { background-color: #1e3a52; }
+        .import-card .subtitle { font-size: 0.8rem; margin: 6px 0 12px 0; color: #4b5563; }
+        .drop-zone { border: 1px dashed #b0b7be; border-radius: 8px; padding: 25px 10px; text-align: center; cursor: pointer; background-color: #fdfdfd; }
+        .upload-icon { font-size: 1.6rem; color: #5d6773; margin-bottom: 8px; }
+        .drop-zone p { font-size: 0.8rem; color: #3b424a; }
+        .btn-import { display: block; margin: 12px auto 0 auto; }
+        .table-container { overflow-x: auto; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background-color: #aed9cf; color: #1b302c; font-size: 0.85rem; font-weight: 600; padding: 10px 12px; text-align: left; }
+        td { padding: 10px 12px; font-size: 0.82rem; border-bottom: 1px solid #e5e7eb; color: #2b303a; vertical-align: middle; }
+        
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; text-align: center; }
+        .badge-produccion { background-color: #92d0eb; color: #103b4d; }
+        .badge-completo { background-color: #9ee6b8; color: #144927; }
+        .badge-faltante { background-color: #fca5a5; color: #6b1414; }
+        .badge-problema { background-color: #fef08a; color: #713f12; }
+        .badge-cancelado { background-color: #e5e7eb; color: #374151; }
+
+        .progress-box { width: 120px; }
+        .progress-bar-bg { width: 100%; background: #e5e7eb; height: 7px; border-radius: 4px; overflow: hidden; margin-top: 4px; }
+        .progress-bar-fill { height: 100%; background: #274b69; transition: width 0.3s ease; }
+        .progress-bar-fill.complete { background: #22c55e; }
+        .faltante-alerta { color: #b91c1c; font-size: 0.75rem; font-weight: 700; margin-top: 3px; }
+        .completo-alerta { color: #15803d; font-size: 0.75rem; font-weight: 700; margin-top: 3px; }
+
+        .timeline-cell { font-size: 0.72rem; line-height: 1.4; color: #4b5563; }
+        .timeline-cell span { display: block; }
+        .timeline-cell strong { color: #1f2937; }
+
+        .actions { display: flex; flex-direction: column; gap: 3px; }
+        .actions a { color: #2d3748; text-decoration: none; font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+        .actions a:hover { color: #1e3a5f; }
+
+        .modal { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+        .modal-contenido { background: #ffffff; padding: 24px; border-radius: 12px; text-align: left; max-width: 460px; width: 90%; }
+        .modal-contenido h3 { margin-bottom: 6px; color: #1f3a52; text-align: center; }
+        .modal-contenido p.sub { font-size: 0.85rem; color: #4b5563; margin-bottom: 16px; text-align: center; }
+        .modal-botones { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; }
+        .btn-cerrar { border: 1px solid #c2c7ce; border-radius: 6px; padding: 9px 18px; font-size: 0.85rem; cursor: pointer; }
+
+        @media print {
+            body * { visibility: hidden; }
+            #modalQR, #modalQR * { visibility: visible; }
+            #modalQR { position: absolute; left: 0; top: 0; width: 100%; background: transparent; }
+            .modal-botones { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="layout-app">
+        <aside class="sidebar">
+            <div class="sidebar-item"><i class="fa-solid fa-bars"></i></div>
+            <div class="sidebar-item active"><i class="fa-solid fa-house"></i></div>
+            <div class="sidebar-item"><i class="fa-regular fa-newspaper"></i></div>
+            <div class="sidebar-item"><i class="fa-solid fa-chart-simple"></i></div>
+        </aside>
+
+        <main class="main-content">
+            <header class="app-header">
+                <h1>Control de Producción e Inventario de Libros</h1>
+            </header>
+
+            <div class="grid-top">
+                <section class="card form-card">
+                    <div class="card-header-flex">
+                        <h2>Nueva Orden de Producción</h2>
+                        <div class="stepper">
+                            <div class="step step-done">
+                                <span class="step-circle"><i class="fa-solid fa-check"></i></span>
+                                <span class="step-label">Solicitud</span>
+                            </div>
+                            <div class="step-line"></div>
+                            <div class="step step-active">
+                                <span class="step-circle"></span>
+                                <span class="step-label">Producción</span>
+                            </div>
+                            <div class="step-line"></div>
+                            <div class="step">
+                                <span class="step-circle"></span>
+                                <span class="step-label">Entregas</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="formProduccion">
+                        <div class="form-columns">
+                            <div class="col">
+                                <div class="form-group">
+                                    <label for="carrera">Todas las Carreras:</label>
+                                    <select name="carrera" id="carrera" onchange="actualizarManuales()" required>
+                                        <option value="">-- Selecciona una Carrera --</option>
+                                        <option value="diseno_industrial">Diseño Industrial</option>
+                                        <option value="mecatronica">Mecatrónica Industrial</option>
+                                        <option value="mecanica_automotriz">Mecánica Automotriz</option>
+                                        <option value="electricidad_industrial">Electricidad y Automatización</option>
+                                        <option value="sistemas_computacionales">Sistemas y Desarrollo de Software</option>
+                                        <option value="mantenimiento_industrial">Mantenimiento Industrial</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="cantidad">Cantidad a Producir:</label>
+                                    <div class="number-input-group">
+                                        <input type="number" name="cantidad" id="cantidad" value="1" min="1" required>
+                                        <button type="button" class="btn-qty" onclick="cambiarCantidad(-1)">-</button>
+                                        <button type="button" class="btn-qty" onclick="cambiarCantidad(1)">+</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="col">
+                                <div class="form-group">
+                                    <label for="manual">Todos los Manuales:</label>
+                                    <div class="input-with-tools">
+                                        <div class="search-box">
+                                            <i class="fa-solid fa-magnifying-glass"></i>
+                                            <input type="text" placeholder="Filtrar manual..." id="buscarManual" oninput="actualizarManuales(this.value)">
+                                        </div>
+                                    </div>
+                                    <select name="manual" id="manual" required>
+                                        <option value="">-- Selecciona primero la carrera --</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn-submit" onclick="agregarOrden()">Generar Solicitud</button>
+                        </div>
+                    </form>
+                </section>
+
+                <section class="card import-card">
+                    <h2>Captura de Información por Archivo</h2>
+                    <p class="subtitle">Sube un archivo CSV con columnas: carrera,manual,cantidad</p>
+                    <div class="drop-zone" onclick="document.getElementById('archivo_datos').click()">
+                        <i class="fa-solid fa-file-csv upload-icon"></i>
+                        <p id="nombreArchivo">Haz clic para seleccionar archivo CSV</p>
+                        <input type="file" id="archivo_datos" accept=".csv, .txt" onchange="mostrarNombreArchivo(this)" hidden>
+                    </div>
+                    <button type="button" class="btn-submit btn-import" onclick="procesarArchivoCSV()">Importar Órdenes</button>
+                </section>
+            </div>
+
+            <section class="card table-card">
+                <div class="card-header-flex">
+                    <h2>Historial y Reporte de Producción (Solicitud - Producción - Entregas)</h2>
+                    <div>
+                        <button type="button" class="btn-qty" onclick="filtrarFaltantes(false)">Ver Todas</button>
+                        <button type="button" class="btn-qty" style="color: #b91c1c;" onclick="filtrarFaltantes(true)"><i class="fa-solid fa-triangle-exclamation"></i> Ver Solo Faltantes</button>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID Orden</th>
+                                <th>Carrera y Manual</th>
+                                <th>Cantidad Producida / Solicitada</th>
+                                <th>Reporte Faltante</th>
+                                <th>Historial Fechas y Horas</th>
+                                <th>Estado</th>
+                                <th>Acciones y Confirmación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cuerpoTabla">
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- MODAL 1: QR DE IDENTIFICACIÓN -->
+    <div id="modalQR" class="modal" style="display: none;">
+        <div class="modal-contenido" style="text-align: center;">
+            <h3 id="qrTitulo">Identificación de Paquete</h3>
+            <p class="sub" id="qrDetalle"></p>
+            <div id="contenedorQR" style="display:flex; justify-content:center; margin-bottom:15px;"></div>
+            <div class="modal-botones" style="justify-content:center;">
+                <button type="button" class="btn-submit" onclick="window.print()">Imprimir QR de Paquete</button>
+                <button type="button" class="btn-qty btn-cerrar" onclick="cerrarModal('modalQR')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: ACTUALIZAR ESTADOS / REPORTAR INCIDENTES Y FALTANTES -->
+    <div id="modalEstado" class="modal" style="display: none;">
+        <div class="modal-contenido">
+            <h3 id="estadoTitulo">Actualizar Orden de Producción</h3>
+            <p class="sub" id="estadoDetalle"></p>
+            <input type="hidden" id="estadoOrdenId">
+
+            <div class="form-group">
+                <label for="nuevoEstadoSelect">Paso / Estado Actual:</label>
+                <select id="nuevoEstadoSelect">
+                    <option value="Producción">En Producción</option>
+                    <option value="Completo">Entregado (Material Completo)</option>
+                    <option value="Faltante">Material Incompleto / Faltante</option>
+                    <option value="Problema">Pausado por Falla / Incidente</option>
+                    <option value="Cancelado">Cancelado</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="cantEntregadaInput">Unidades Producidas / Entregadas:</label>
+                <input type="number" id="cantEntregadaInput" min="0">
+            </div>
+
+            <div class="form-group">
+                <label for="motivoIncidenteInput">Observaciones / Reporte de Faltante o Problema:</label>
+                <textarea id="motivoIncidenteInput" rows="3" placeholder="Detalla el problema (ej: faltaron 5 ejemplares por falta de papel, encuadernación dañada, etc.)"></textarea>
+            </div>
+
+            <div class="modal-botones">
+                <button type="button" class="btn-submit" onclick="guardarActualizacionEstado()">Registrar Paso</button>
+                <button type="button" class="btn-qty btn-cerrar" onclick="cerrarModal('modalEstado')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. TODAS LAS CARRERAS Y TODOS LOS MANUALES
+        const manualesPorCarrera = {
+            "diseno_industrial": [
+                "Manual de Dibujo Técnico y Expresión Gráfica",
+                "Manual de Modelado y Taller de Prototipos 3D",
+                "Manual de Ergonomía y Factores Humanos",
+                "Manual de Procesos de Manufactura y Materiales",
+                "Manual de Diseño Digital CAD/CAM"
+            ],
+            "mecatronica": [
+                "Manual de Circuitos Electrónicos y PCB",
+                "Manual de Microcontroladores, Sensores y Actuadores",
+                "Manual de Control de Motores y Variadores",
+                "Manual de Robótica Industrial y Neumática",
+                "Manual de Controladores Lógicos Programables (PLC)"
+            ],
+            "mecanica_automotriz": [
+                "Manual de Motores de Combustión Interna",
+                "Manual de Sistemas de Inyección Electrónica",
+                "Manual de Transmisiones Manuales y Automáticas",
+                "Manual de Frenos, Dirección y Suspensión",
+                "Manual de Diagnóstico por Escáner OBD-II"
+            ],
+            "electricidad_industrial": [
+                "Manual de Instalaciones Eléctricas de Media y Baja Tensión",
+                "Manual de Máquinas Eléctricas y Transformadores",
+                "Manual de Tableros Eléctricos y Subestaciones",
+                "Manual de Seguridad y Código Eléctrico"
+            ],
+            "sistemas_computacionales": [
+                "Manual de Fundamentos de Algoritmos y Python",
+                "Manual de Desarrollo Web Frontend y Backend",
+                "Manual de Redes, Enrutamiento y Conmutación",
+                "Manual de Administración de Bases de Datos SQL y NoSQL"
+            ],
+            "mantenimiento_industrial": [
+                "Manual de Mantenimiento Preventivo y Correctivo",
+                "Manual de Alineación y Balanceo Dinámico",
+                "Manual de Lubricación Industrial y Análisis de Aceite",
+                "Manual de Termografía y Ensayos No Destructivos"
+            ]
+        };
+
+        let listaOrdenes = JSON.parse(localStorage.getItem('ordenes_libros')) || [];
+        let soloFaltantes = false;
+
+        function guardarEnLocalStorage() {
+            localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+        }
+
+        function cambiarCantidad(valor) {
+            const input = document.getElementById('cantidad');
+            let val = (parseInt(input.value) || 1) + valor;
+            if (val >= 1) input.value = val;
+        }
+
+        function actualizarManuales(filtro = '') {
+            const selectCarrera = document.getElementById('carrera');
+            const selectManual = document.getElementById('manual');
+            const carrera = selectCarrera.value;
+            selectManual.innerHTML = '';
+
+            if (!carrera || !manualesPorCarrera[carrera]) {
+                selectManual.innerHTML = '<option value="">-- Selecciona primero la carrera --</option>';
+                return;
+            }
+
+            const manuales = manualesPorCarrera[carrera].filter(m => 
+                m.toLowerCase().includes(filtro.toLowerCase())
+            );
+
+            if (manuales.length === 0) {
+                selectManual.innerHTML = '<option value="">-- Sin resultados --</option>';
+                return;
+            }
+
+            manuales.forEach((m, idx) => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                if (idx === 0) opt.selected = true;
+                selectManual.appendChild(opt);
+            });
+        }
+
+        // 2. RENDERIZADO DEL TABLERO DE CONTROL Y REPORTE DE FALTANTES
+        function renderizarTabla() {
+            const cuerpoTabla = document.getElementById('cuerpoTabla');
+            cuerpoTabla.innerHTML = '';
+
+            const ordenesAMostrar = soloFaltantes 
+                ? listaOrdenes.filter(o => o.entregados < o.cantidad && o.estado !== 'Cancelado')
+                : listaOrdenes;
+
+            if (ordenesAMostrar.length === 0) {
+                cuerpoTabla.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #6b7280;">No hay órdenes que coincidan con la vista seleccionada.</td></tr>`;
+                return;
+            }
+
+            ordenesAMostrar.forEach(orden => {
+                const fila = document.createElement('tr');
+                
+                let badgeClass = 'badge-produccion';
+                if (orden.estado === 'Completo') badgeClass = 'badge-completo';
+                if (orden.estado === 'Faltante') badgeClass = 'badge-faltante';
+                if (orden.estado === 'Problema') badgeClass = 'badge-problema';
+                if (orden.estado === 'Cancelado') badgeClass = 'badge-cancelado';
+
+                const porcentaje = Math.min(100, Math.round((orden.entregados / orden.cantidad) * 100)) || 0;
+                const esCompleto = orden.entregados >= orden.cantidad;
+                const faltan = orden.cantidad - orden.entregados;
+
+                fila.innerHTML = `
+                    <td><strong>#${orden.id}</strong></td>
+                    <td><strong>${orden.carrera}</strong><br><small>${orden.manual}</small></td>
+                    <td>
+                        <div class="progress-box">
+                            <span><strong>${orden.entregados}</strong> de <strong>${orden.cantidad}</strong> (${porcentaje}%)</span>
+                            <div class="progress-bar-bg">
+                                <div class="progress-bar-fill ${esCompleto ? 'complete' : ''}" style="width: ${porcentaje}%;"></div>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        ${faltan > 0 && orden.estado !== 'Cancelado' 
+                            ? `<span class="faltante-alerta"><i class="fa-solid fa-triangle-exclamation"></i> FALTA (${faltan} pzas)</span>` 
+                            : `<span class="completo-alerta"><i class="fa-solid fa-circle-check"></i> NO FALTA</span>`
+                        }
+                    </td>
+                    <td class="timeline-cell">
+                        <span><strong>Solicitud:</strong> ${orden.timestamps.solicitud || '---'}</span>
+                        <span><strong>Producción:</strong> ${orden.timestamps.produccion || 'Pendiente'}</span>
+                        <span><strong>Entrega:</strong> ${orden.timestamps.entrega || 'Pendiente'}</span>
+                    </td>
+                    <td><span class="badge ${badgeClass}">${orden.estado}</span></td>
+                    <td class="actions">
+                        ${!esCompleto && orden.estado !== 'Cancelado' 
+                            ? `<a href="javascript:void(0)" style="color:#15803d; font-weight:bold;" onclick="confirmarMaterialCompletoDirecto(${orden.id})"><i class="fa-solid fa-check-double"></i> Confirmar Completo</a>` 
+                            : ''
+                        }
+                        <a href="javascript:void(0)" onclick="abrirModalEstado(${orden.id})"><i class="fa-solid fa-pen-to-square"></i> Actualizar Paso/Reporte</a>
+                        <a href="javascript:void(0)" onclick="verHistorial(${orden.id})"><i class="fa-solid fa-clock-rotate-left"></i> Historial Completo</a>
+                        <a href="javascript:void(0)" onclick="mostrarModalQR(${orden.id})"><i class="fa-solid fa-qrcode"></i> QR Identificación</a>
+                    </td>
+                `;
+                cuerpoTabla.appendChild(fila);
+            });
+        }
+
+        function filtrarFaltantes(activar) {
+            soloFaltantes = activar;
+            renderizarTabla();
+        }
+
+        // 3. GENERAR NUEVA SOLICITUD
+        function agregarOrden() {
+            const selectCarrera = document.getElementById('carrera');
+            const selectManual = document.getElementById('manual');
+            const inputCantidad = document.getElementById('cantidad');
+
+            const carreraVal = selectCarrera.value;
+            const carreraTexto = selectCarrera.options[selectCarrera.selectedIndex]?.text || '';
+            const manualTexto = selectManual.value;
+            const cantidad = parseInt(inputCantidad.value) || 1;
+
+            if (!carreraVal || !manualTexto) {
+                alert('Por favor selecciona una carrera y un manual.');
+                return;
+            }
+
+            const ahora = new Date();
+            const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
+
+            const nuevaOrden = {
+                id: nuevoID,
+                carrera: carreraTexto,
+                manual: manualTexto,
+                cantidad: cantidad,
+                entregados: 0,
+                estado: 'Producción',
+                timestamps: {
+                    solicitud: fechaHora,
+                    produccion: fechaHora,
+                    entrega: null
+                },
+                historial: [`[${fechaHora}] PASO 1 (Solicitud): Se solicitaron ${cantidad} manuales. Entrada en producción.`]
+            };
+
+            listaOrdenes.push(nuevaOrden);
+            guardarEnLocalStorage();
+            renderizarTabla();
+            inputCantidad.value = 1;
+        }
+
+        // 4. CONFIRMACIÓN DIRECTA DE MATERIAL COMPLETO
+        function confirmarMaterialCompletoDirecto(id) {
+            const orden = listaOrdenes.find(o => o.id === id);
+            if (!orden) return;
+
+            const confirmar = confirm(`¿Confirmar que el paquete de la Orden #${orden.id} tiene todo el material completo?\n\nManual: ${orden.manual}\nCantidad total: ${orden.cantidad} unidades`);
+            if (confirmar) {
+                const ahora = new Date();
+                const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                orden.entregados = orden.cantidad;
+                orden.estado = 'Completo';
+                orden.timestamps.entrega = fechaHora;
+                orden.historial.push(`[${fechaHora}] PASO 3 (Entrega): Confirmación de material completo. Se entregaron ${orden.cantidad} unidades.`);
+
+                guardarEnLocalStorage();
+                renderizarTabla();
+            }
+        }
+
+        // 5. IMPORTACIÓN DE ARCHIVOS CSV PARA CAPTURAR INFORMACIÓN
+        function mostrarNombreArchivo(input) {
+            if (input.files && input.files[0]) {
+                document.getElementById('nombreArchivo').textContent = `Archivo: ${input.files[0].name}`;
+            }
+        }
+
+        function procesarArchivoCSV() {
+            const input = document.getElementById('archivo_datos');
+            if (!input.files || !input.files[0]) {
+                alert('Por favor selecciona un archivo CSV primero.');
+                return;
+            }
+
+            const lector = new FileReader();
+            lector.onload = function(e) {
+                const contenido = e.target.result;
+                const lineas = contenido.split('\n');
+                let importados = 0;
+                const ahora = new Date();
+                const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                lineas.forEach(linea => {
+                    const columnas = linea.split(',');
+                    if (columnas.length >= 3) {
+                        const carrera = columnas[0].trim();
+                        const manual = columnas[1].trim();
+                        const cantidad = parseInt(columnas[2].trim());
+
+                        if (carrera && manual && !isNaN(cantidad)) {
+                            const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
+                            listaOrdenes.push({
+                                id: nuevoID,
+                                carrera: carrera,
+                                manual: manual,
+                                cantidad: cantidad,
+                                entregados: 0,
+                                estado: 'Producción',
+                                timestamps: {
+                                    solicitud: fechaHora,
+                                    produccion: fechaHora,
+                                    entrega: null
+                                },
+                                historial: [`[${fechaHora}] Importado desde archivo. Solicitud de ${cantidad} unidades.`]
+                            });
+                            importados++;
+                        }
+                    }
+                });
+
+                if (importados > 0) {
+                    guardarEnLocalStorage();
+                    renderizarTabla();
+                    alert(`¡Se importaron con éxito ${importados} órdenes desde el archivo!`);
+                    input.value = '';
+                    document.getElementById('nombreArchivo').textContent = 'Haz clic para seleccionar archivo CSV';
+                } else {
+                    alert('No se encontraron registros válidos. Formato requerido por línea:\nCarrera, Manual, Cantidad');
+                }
+            };
+            lector.readAsText(input.files[0]);
+        }
+
+        // 6. GESTIÓN DEL MODAL DE ESTADO, INCIDENTES Y PASOS
+        function abrirModalEstado(id) {
+            const orden = listaOrdenes.find(o => o.id === id);
+            if (!orden) return;
+
+            document.getElementById('estadoOrdenId').value = orden.id;
+            document.getElementById('estadoTitulo').textContent = `Actualizar Orden #${orden.id}`;
+            document.getElementById('estadoDetalle').textContent = `${orden.carrera} - ${orden.manual}`;
+            document.getElementById('nuevoEstadoSelect').value = orden.estado;
+            document.getElementById('cantEntregadaInput').value = orden.entregados;
+            document.getElementById('motivoIncidenteInput').value = '';
+
+            document.getElementById('modalEstado').style.display = 'flex';
+        }
+
+        function guardarActualizacionEstado() {
+            const id = parseInt(document.getElementById('estadoOrdenId').value);
+            const orden = listaOrdenes.find(o => o.id === id);
+            if (!orden) return;
+
+            const nuevoEstado = document.getElementById('nuevoEstadoSelect').value;
+            let nuevaCant = parseInt(document.getElementById('cantEntregadaInput').value) || 0;
+            const motivo = document.getElementById('motivoIncidenteInput').value.trim();
+
+            if (nuevoEstado === 'Completo') {
+                nuevaCant = orden.cantidad;
+            }
+
+            if (nuevaCant > orden.cantidad) {
+                alert(`La cantidad producida/entregada no puede exceder la solicitada (${orden.cantidad}).`);
+                return;
+            }
+
+            const ahora = new Date();
+            const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            orden.estado = nuevoEstado;
+            orden.entregados = nuevaCant;
+
+            if (nuevoEstado === 'Completo') {
+                orden.timestamps.entrega = fechaHora;
+            } else if (nuevoEstado === 'Producción') {
+                orden.timestamps.produccion = fechaHora;
+            }
+
+            let log = `[${fechaHora}] Estado actualizado a '${nuevoEstado}'. Avance: ${nuevaCant}/${orden.cantidad}`;
+            if (motivo) log += ` | Observación: "${motivo}"`;
+            
+            orden.historial.push(log);
+
+            guardarEnLocalStorage();
+            renderizarTabla();
+            cerrarModal('modalEstado');
+        }
+
+        // 7. CÓDIGO QR DE IDENTIFICACIÓN DE PAQUETE
+        function mostrarModalQR(id) {
+            const orden = listaOrdenes.find(o => o.id === id);
+            if (!orden) return;
+
+            document.getElementById('qrTitulo').textContent = `Paquete de Libros - Orden #${orden.id}`;
+            document.getElementById('qrDetalle').innerHTML = `<strong>${orden.carrera}</strong><br>${orden.manual}<br>Cantidad: ${orden.cantidad} libros`;
+            
+            const urlDestino = `${window.location.origin}${window.location.pathname}?accion=entregar&id=${orden.id}`;
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=170x170&data=${encodeURIComponent(urlDestino)}`;
+            
+            document.getElementById('contenedorQR').innerHTML = `
+                <img src="${qrUrl}" alt="QR Paquete #${orden.id}" width="170" height="170"><br>
+                <div style="margin-top: 10px;">
+                    <a href="${urlDestino}" style="font-size: 0.82rem; color: #274b69; text-decoration: underline;">
+                        Escanear código (Confirmar Entrega de Paquete)
+                    </a>
+                </div>
+            `;
+            document.getElementById('modalQR').style.display = 'flex';
+        }
+
+        function cerrarModal(idModal) {
+            document.getElementById(idModal).style.display = 'none';
+        }
+
+        function verHistorial(id) {
+            const orden = listaOrdenes.find(o => o.id === id);
+            if (orden) {
+                alert(`HISTORIAL COMPLETO DE SEGUIMIENTO - ORDEN #${orden.id}\n${orden.carrera} - ${orden.manual}\n\nLÍNEA TEMPORAL:\n- ` + orden.historial.join('\n- '));
+            }
+        }
+
+        // 8. ESCANEO DEL QR AL CARGAR
+        window.addEventListener('load', () => {
+            renderizarTabla();
+
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('accion') === 'entregar') {
+                const idOrden = parseInt(params.get('id'));
+                const orden = listaOrdenes.find(o => o.id === idOrden);
+
+                if (orden) {
+                    confirmarMaterialCompletoDirecto(idOrden);
+                }
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+        });
+    </script>
+</body>
+</html>
