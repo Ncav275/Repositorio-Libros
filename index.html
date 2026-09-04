@@ -172,7 +172,7 @@
 
                 <section class="card import-card">
                     <h2>Captura de Información por Archivo</h2>
-                    <p class="subtitle">Sube un archivo CSV con columnas: carrera,manual,cantidad</p>
+                    <p class="subtitle">Sube un archivo CSV con formato: carrera,manual,cantidad</p>
                     <div class="drop-zone" onclick="document.getElementById('archivo_datos').click()">
                         <i class="fa-solid fa-file-csv upload-icon"></i>
                         <p id="nombreArchivo">Haz clic para seleccionar archivo CSV</p>
@@ -261,7 +261,9 @@
     </div>
 
     <script>
-        // 1. TODAS LAS CARRERAS Y TODOS LOS MANUALES
+        // PEGA AQUÍ TU URL DE REALTIME DATABASE (CON /ordenes.json AL FINAL)
+        const FIREBASE_URL = "https://TU-PROYECTO-default-rtdb.firebaseio.com/ordenes.json";
+
         const manualesPorCarrera = {
             "diseno_industrial": [
                 "Manual de Dibujo Técnico y Expresión Gráfica",
@@ -304,11 +306,32 @@
             ]
         };
 
-        let listaOrdenes = JSON.parse(localStorage.getItem('ordenes_libros')) || [];
+        let listaOrdenes = [];
         let soloFaltantes = false;
 
-        function guardarEnLocalStorage() {
-            localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+        async function cargarOrdenesDeLaNube() {
+            try {
+                if (FIREBASE_URL.includes("TU-PROYECTO")) {
+                    listaOrdenes = JSON.parse(localStorage.getItem('ordenes_libros')) || [];
+                    renderizarTabla();
+                    return;
+                }
+
+                const resp = await fetch(FIREBASE_URL);
+                const data = await resp.json();
+                
+                if (data) {
+                    listaOrdenes = Object.keys(data).map(key => ({
+                        firebaseKey: key,
+                        ...data[key]
+                    }));
+                } else {
+                    listaOrdenes = [];
+                }
+                renderizarTabla();
+            } catch (error) {
+                console.error("Error cargando base de datos:", error);
+            }
         }
 
         function cambiarCantidad(valor) {
@@ -346,7 +369,6 @@
             });
         }
 
-        // 2. RENDERIZADO DEL TABLERO DE CONTROL Y REPORTE DE FALTANTES
         function renderizarTabla() {
             const cuerpoTabla = document.getElementById('cuerpoTabla');
             cuerpoTabla.innerHTML = '';
@@ -356,7 +378,7 @@
                 : listaOrdenes;
 
             if (ordenesAMostrar.length === 0) {
-                cuerpoTabla.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #6b7280;">No hay órdenes que coincidan con la vista seleccionada.</td></tr>`;
+                cuerpoTabla.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 20px; color: #6b7280;">No hay órdenes registradas.</td></tr>`;
                 return;
             }
 
@@ -372,6 +394,7 @@
                 const porcentaje = Math.min(100, Math.round((orden.entregados / orden.cantidad) * 100)) || 0;
                 const esCompleto = orden.entregados >= orden.cantidad;
                 const faltan = orden.cantidad - orden.entregados;
+                const ident = orden.firebaseKey || orden.id;
 
                 fila.innerHTML = `
                     <td><strong>#${orden.id}</strong></td>
@@ -391,18 +414,18 @@
                         }
                     </td>
                     <td class="timeline-cell">
-                        <span><strong>Solicitud:</strong> ${orden.timestamps.solicitud || '---'}</span>
-                        <span><strong>Producción:</strong> ${orden.timestamps.produccion || 'Pendiente'}</span>
-                        <span><strong>Entrega:</strong> ${orden.timestamps.entrega || 'Pendiente'}</span>
+                        <span><strong>Solicitud:</strong> ${orden.timestamps?.solicitud || '---'}</span>
+                        <span><strong>Producción:</strong> ${orden.timestamps?.produccion || 'Pendiente'}</span>
+                        <span><strong>Entrega:</strong> ${orden.timestamps?.entrega || 'Pendiente'}</span>
                     </td>
                     <td><span class="badge ${badgeClass}">${orden.estado}</span></td>
                     <td class="actions">
                         ${!esCompleto && orden.estado !== 'Cancelado' 
-                            ? `<a href="javascript:void(0)" style="color:#15803d; font-weight:bold;" onclick="confirmarMaterialCompletoDirecto(${orden.id})"><i class="fa-solid fa-check-double"></i> Confirmar Completo</a>` 
+                            ? `<a href="javascript:void(0)" style="color:#15803d; font-weight:bold;" onclick="confirmarMaterialCompletoDirecto('${ident}')"><i class="fa-solid fa-check-double"></i> Confirmar Completo</a>` 
                             : ''
                         }
-                        <a href="javascript:void(0)" onclick="abrirModalEstado(${orden.id})"><i class="fa-solid fa-pen-to-square"></i> Actualizar Paso/Reporte</a>
-                        <a href="javascript:void(0)" onclick="verHistorial(${orden.id})"><i class="fa-solid fa-clock-rotate-left"></i> Historial Completo</a>
+                        <a href="javascript:void(0)" onclick="abrirModalEstado('${ident}')"><i class="fa-solid fa-pen-to-square"></i> Actualizar Paso/Reporte</a>
+                        <a href="javascript:void(0)" onclick="verHistorial('${ident}')"><i class="fa-solid fa-clock-rotate-left"></i> Historial Completo</a>
                         <a href="javascript:void(0)" onclick="mostrarModalQR(${orden.id})"><i class="fa-solid fa-qrcode"></i> QR Identificación</a>
                     </td>
                 `;
@@ -415,8 +438,7 @@
             renderizarTabla();
         }
 
-        // 3. GENERAR NUEVA SOLICITUD
-        function agregarOrden() {
+        async function agregarOrden() {
             const selectCarrera = document.getElementById('carrera');
             const selectManual = document.getElementById('manual');
             const inputCantidad = document.getElementById('cantidad');
@@ -447,21 +469,30 @@
                     produccion: fechaHora,
                     entrega: null
                 },
-                historial: [`[${fechaHora}] PASO 1 (Solicitud): Se solicitaron ${cantidad} manuales. Entrada en producción.`]
+                historial: [`[${fechaHora}] PASO 1 (Solicitud): Solicitados ${cantidad} manuales.`]
             };
 
-            listaOrdenes.push(nuevaOrden);
-            guardarEnLocalStorage();
-            renderizarTabla();
+            if (FIREBASE_URL.includes("TU-PROYECTO")) {
+                listaOrdenes.push(nuevaOrden);
+                localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+                renderizarTabla();
+            } else {
+                await fetch(FIREBASE_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(nuevaOrden),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                await cargarOrdenesDeLaNube();
+            }
+
             inputCantidad.value = 1;
         }
 
-        // 4. CONFIRMACIÓN DIRECTA DE MATERIAL COMPLETO
-        function confirmarMaterialCompletoDirecto(id) {
-            const orden = listaOrdenes.find(o => o.id === id);
+        async function confirmarMaterialCompletoDirecto(ident) {
+            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
             if (!orden) return;
 
-            const confirmar = confirm(`¿Confirmar que el paquete de la Orden #${orden.id} tiene todo el material completo?\n\nManual: ${orden.manual}\nCantidad total: ${orden.cantidad} unidades`);
+            const confirmar = confirm(`¿Confirmar entrega completa de la Orden #${orden.id}?\n\nManual: ${orden.manual}\nCantidad: ${orden.cantidad} piezas.`);
             if (confirmar) {
                 const ahora = new Date();
                 const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -469,82 +500,33 @@
                 orden.entregados = orden.cantidad;
                 orden.estado = 'Completo';
                 orden.timestamps.entrega = fechaHora;
-                orden.historial.push(`[${fechaHora}] PASO 3 (Entrega): Confirmación de material completo. Se entregaron ${orden.cantidad} unidades.`);
+                orden.historial.push(`[${fechaHora}] PASO 3 (Entrega): Confirmación de material completo.`);
 
-                guardarEnLocalStorage();
-                renderizarTabla();
-            }
-        }
-
-        // 5. IMPORTACIÓN DE ARCHIVOS CSV PARA CAPTURAR INFORMACIÓN
-        function mostrarNombreArchivo(input) {
-            if (input.files && input.files[0]) {
-                document.getElementById('nombreArchivo').textContent = `Archivo: ${input.files[0].name}`;
-            }
-        }
-
-        function procesarArchivoCSV() {
-            const input = document.getElementById('archivo_datos');
-            if (!input.files || !input.files[0]) {
-                alert('Por favor selecciona un archivo CSV primero.');
-                return;
-            }
-
-            const lector = new FileReader();
-            lector.onload = function(e) {
-                const contenido = e.target.result;
-                const lineas = contenido.split('\n');
-                let importados = 0;
-                const ahora = new Date();
-                const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-                lineas.forEach(linea => {
-                    const columnas = linea.split(',');
-                    if (columnas.length >= 3) {
-                        const carrera = columnas[0].trim();
-                        const manual = columnas[1].trim();
-                        const cantidad = parseInt(columnas[2].trim());
-
-                        if (carrera && manual && !isNaN(cantidad)) {
-                            const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
-                            listaOrdenes.push({
-                                id: nuevoID,
-                                carrera: carrera,
-                                manual: manual,
-                                cantidad: cantidad,
-                                entregados: 0,
-                                estado: 'Producción',
-                                timestamps: {
-                                    solicitud: fechaHora,
-                                    produccion: fechaHora,
-                                    entrega: null
-                                },
-                                historial: [`[${fechaHora}] Importado desde archivo. Solicitud de ${cantidad} unidades.`]
-                            });
-                            importados++;
-                        }
-                    }
-                });
-
-                if (importados > 0) {
-                    guardarEnLocalStorage();
-                    renderizarTabla();
-                    alert(`¡Se importaron con éxito ${importados} órdenes desde el archivo!`);
-                    input.value = '';
-                    document.getElementById('nombreArchivo').textContent = 'Haz clic para seleccionar archivo CSV';
+                if (orden.firebaseKey) {
+                    const urlItem = FIREBASE_URL.replace('.json', `/${orden.firebaseKey}.json`);
+                    await fetch(urlItem, {
+                        method: 'PATCH',
+                        body: JSON.stringify({
+                            entregados: orden.cantidad,
+                            estado: 'Completo',
+                            timestamps: orden.timestamps,
+                            historial: orden.historial
+                        }),
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    await cargarOrdenesDeLaNube();
                 } else {
-                    alert('No se encontraron registros válidos. Formato requerido por línea:\nCarrera, Manual, Cantidad');
+                    localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+                    renderizarTabla();
                 }
-            };
-            lector.readAsText(input.files[0]);
+            }
         }
 
-        // 6. GESTIÓN DEL MODAL DE ESTADO, INCIDENTES Y PASOS
-        function abrirModalEstado(id) {
-            const orden = listaOrdenes.find(o => o.id === id);
+        function abrirModalEstado(ident) {
+            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
             if (!orden) return;
 
-            document.getElementById('estadoOrdenId').value = orden.id;
+            document.getElementById('estadoOrdenId').value = ident;
             document.getElementById('estadoTitulo').textContent = `Actualizar Orden #${orden.id}`;
             document.getElementById('estadoDetalle').textContent = `${orden.carrera} - ${orden.manual}`;
             document.getElementById('nuevoEstadoSelect').value = orden.estado;
@@ -554,9 +536,9 @@
             document.getElementById('modalEstado').style.display = 'flex';
         }
 
-        function guardarActualizacionEstado() {
-            const id = parseInt(document.getElementById('estadoOrdenId').value);
-            const orden = listaOrdenes.find(o => o.id === id);
+        async function guardarActualizacionEstado() {
+            const ident = document.getElementById('estadoOrdenId').value;
+            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
             if (!orden) return;
 
             const nuevoEstado = document.getElementById('nuevoEstadoSelect').value;
@@ -568,7 +550,7 @@
             }
 
             if (nuevaCant > orden.cantidad) {
-                alert(`La cantidad producida/entregada no puede exceder la solicitada (${orden.cantidad}).`);
+                alert(`La cantidad producida/entregada no puede superar la solicitada (${orden.cantidad}).`);
                 return;
             }
 
@@ -586,15 +568,29 @@
 
             let log = `[${fechaHora}] Estado actualizado a '${nuevoEstado}'. Avance: ${nuevaCant}/${orden.cantidad}`;
             if (motivo) log += ` | Observación: "${motivo}"`;
-            
             orden.historial.push(log);
 
-            guardarEnLocalStorage();
-            renderizarTabla();
+            if (orden.firebaseKey) {
+                const urlItem = FIREBASE_URL.replace('.json', `/${orden.firebaseKey}.json`);
+                await fetch(urlItem, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                        entregados: nuevaCant,
+                        estado: nuevoEstado,
+                        timestamps: orden.timestamps,
+                        historial: orden.historial
+                    }),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                await cargarOrdenesDeLaNube();
+            } else {
+                localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+                renderizarTabla();
+            }
+
             cerrarModal('modalEstado');
         }
 
-        // 7. CÓDIGO QR DE IDENTIFICACIÓN DE PAQUETE
         function mostrarModalQR(id) {
             const orden = listaOrdenes.find(o => o.id === id);
             if (!orden) return;
@@ -609,7 +605,7 @@
                 <img src="${qrUrl}" alt="QR Paquete #${orden.id}" width="170" height="170"><br>
                 <div style="margin-top: 10px;">
                     <a href="${urlDestino}" style="font-size: 0.82rem; color: #274b69; text-decoration: underline;">
-                        Escanear código (Confirmar Entrega de Paquete)
+                        Escanear código (Confirmar Entrega)
                     </a>
                 </div>
             `;
@@ -620,16 +616,93 @@
             document.getElementById(idModal).style.display = 'none';
         }
 
-        function verHistorial(id) {
-            const orden = listaOrdenes.find(o => o.id === id);
+        function verHistorial(ident) {
+            const orden = listaOrdenes.find(o => (o.firebaseKey === ident || o.id === parseInt(ident)));
             if (orden) {
-                alert(`HISTORIAL COMPLETO DE SEGUIMIENTO - ORDEN #${orden.id}\n${orden.carrera} - ${orden.manual}\n\nLÍNEA TEMPORAL:\n- ` + orden.historial.join('\n- '));
+                alert(`HISTORIAL DE SEGUIMIENTO - ORDEN #${orden.id}\n${orden.carrera} - ${orden.manual}\n\nLÍNEA TEMPORAL:\n- ` + orden.historial.join('\n- '));
             }
         }
 
-        // 8. ESCANEO DEL QR AL CARGAR
-        window.addEventListener('load', () => {
-            renderizarTabla();
+        function mostrarNombreArchivo(input) {
+            if (input.files && input.files[0]) {
+                document.getElementById('nombreArchivo').textContent = `Archivo: ${input.files[0].name}`;
+            }
+        }
+
+        async function procesarArchivoCSV() {
+            const input = document.getElementById('archivo_datos');
+            if (!input.files || !input.files[0]) {
+                alert('Por favor selecciona un archivo CSV primero.');
+                return;
+            }
+
+            const lector = new FileReader();
+            lector.onload = async function(e) {
+                const contenido = e.target.result;
+                const lineas = contenido.split('\n');
+                let importados = 0;
+                const ahora = new Date();
+                const fechaHora = ahora.toLocaleDateString() + ', ' + ahora.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                for (const linea of lineas) {
+                    const columnas = linea.split(',');
+                    if (columnas.length >= 3) {
+                        const carrera = columnas[0].trim();
+                        const manual = columnas[1].trim();
+                        const cantidad = parseInt(columnas[2].trim());
+
+                        if (carrera && manual && !isNaN(cantidad)) {
+                            const nuevoID = listaOrdenes.length > 0 ? Math.max(...listaOrdenes.map(o => o.id)) + 1 : 1001;
+                            const ordenObj = {
+                                id: nuevoID,
+                                carrera: carrera,
+                                manual: manual,
+                                cantidad: cantidad,
+                                entregados: 0,
+                                estado: 'Producción',
+                                timestamps: {
+                                    solicitud: fechaHora,
+                                    produccion: fechaHora,
+                                    entrega: null
+                                },
+                                historial: [`[${fechaHora}] Importado desde archivo. Solicitud de ${cantidad} unidades.`]
+                            };
+
+                            if (FIREBASE_URL.includes("TU-PROYECTO")) {
+                                listaOrdenes.push(ordenObj);
+                            } else {
+                                await fetch(FIREBASE_URL, {
+                                    method: 'POST',
+                                    body: JSON.stringify(ordenObj),
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                            }
+                            importados++;
+                        }
+                    }
+                }
+
+                if (importados > 0) {
+                    alert(`¡Se importaron ${importados} órdenes con éxito!`);
+                    input.value = '';
+                    document.getElementById('nombreArchivo').textContent = 'Haz clic para seleccionar archivo CSV';
+                    if (FIREBASE_URL.includes("TU-PROYECTO")) {
+                        localStorage.setItem('ordenes_libros', JSON.stringify(listaOrdenes));
+                        renderizarTabla();
+                    } else {
+                        await cargarOrdenesDeLaNube();
+                    }
+                }
+            };
+            lector.readAsText(input.files[0]);
+        }
+
+        window.addEventListener('load', async () => {
+            await cargarOrdenesDeLaNube();
+
+            if (!FIREBASE_URL.includes("TU-PROYECTO")) {
+                setInterval(cargarOrdenesDeLaNube, 4000);
+            }
 
             const params = new URLSearchParams(window.location.search);
             if (params.get('accion') === 'entregar') {
@@ -637,7 +710,7 @@
                 const orden = listaOrdenes.find(o => o.id === idOrden);
 
                 if (orden) {
-                    confirmarMaterialCompletoDirecto(idOrden);
+                    confirmarMaterialCompletoDirecto(orden.firebaseKey || orden.id);
                 }
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
